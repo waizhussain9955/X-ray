@@ -80,13 +80,12 @@ void main() {
   vec3 particleFinalColor = contourColor + particleGridColor + subjectGlow;
 
   // ------------------------------------------
-  // Mode 1: X-Ray Effect
+  // Mode 1: X-Ray Effect (Holographic Body Scanner)
   // ------------------------------------------
-  vec3 lightBlue = vec3(0.02, 0.25, 0.7);
-  vec3 darkBlue = vec3(0.0, 0.02, 0.15);
-  float faceMask = smoothstep(0.15, 0.75, brightness);
-  vec3 xrayBaseColor = mix(lightBlue, darkBlue, faceMask);
+  // Set base color to a very dark navy/black to hide clothing colors
+  vec3 xrayBaseColor = vec3(0.002, 0.008, 0.035) * brightness;
 
+  // Perform edge detection to outline the body
   vec2 texelSize = 1.0 / resolution;
   float m00 = dot(texture2D(tDiffuse, vec2(1.0 - (vUv.x - texelSize.x), vUv.y - texelSize.y)).rgb, vec3(0.299, 0.587, 0.114));
   float m01 = dot(texture2D(tDiffuse, vec2(1.0 - vUv.x,                 vUv.y - texelSize.y)).rgb, vec3(0.299, 0.587, 0.114));
@@ -102,12 +101,17 @@ void main() {
   float edgeX = (m02 + 2.0 * m12 + m22) - (m00 + 2.0 * m10 + m20);
   float edgeY = (m20 + 2.0 * m21 + m22) - (m00 + 2.0 * m01 + m02);
   float edgeMag = sqrt(edgeX * edgeX + edgeY * edgeY);
-  vec3 cyanEdges = vec3(0.0, 0.9, 1.0) * edgeMag * 2.0;
+  
+  // High intensity cyan edges for the body contours
+  vec3 cyanEdges = vec3(0.0, 0.95, 1.0) * smoothstep(0.06, 0.25, edgeMag) * 3.5;
 
-  float noiseVal = hash(vUv + time * 100.0) * 0.1 - 0.05;
-  float scanline = sin(vUv.y * resolution.y * 2.0) * 0.05;
+  // Soft glowing body volume silhouette (highlights skin areas like face and hands, masks out clothing)
+  vec3 bodySilhouette = vec3(0.0, 0.25, 0.45) * smoothstep(0.35, 0.8, brightness) * 0.5;
 
-  vec3 xrayFinalColor = xrayBaseColor + cyanEdges + vec3(noiseVal) - vec3(scanline);
+  float noiseVal = hash(vUv + time * 100.0) * 0.08 - 0.04;
+  float scanline = sin(vUv.y * resolution.y * 1.5) * 0.04;
+
+  vec3 xrayFinalColor = xrayBaseColor + cyanEdges + bodySilhouette + vec3(noiseVal) - vec3(scanline);
 
   // ------------------------------------------
   // Mode Blending
@@ -214,6 +218,68 @@ const XRayWindow: React.FC<XRayWindowProps> = ({
     </mesh>
   );
 };
+
+// ==========================================
+// Helper Functions for X-Ray Bones
+// ==========================================
+
+function isPointInQuad(p: Point, quad: Point[]): boolean {
+  if (quad.length !== 4) return false;
+  // Ray casting algorithm for polygon inclusion
+  const vs = [quad[0], quad[1], quad[3], quad[2]]; // TL, TR, BR, BL
+  const x = p.x, y = p.y;
+  let inside = false;
+  for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+    const xi = vs[i].x, yi = vs[i].y;
+    const xj = vs[j].x, yj = vs[j].y;
+    const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function getBoneThickness(i: number, j: number): number {
+  if (i === 0 || j === 0) return 9.0;
+  if (i === 5 && j === 9) return 8.0;
+  if (i === 9 && j === 13) return 8.0;
+  if (i === 13 && j === 17) return 8.0;
+  
+  const maxIdx = Math.max(i, j);
+  if (maxIdx <= 4) {
+    if (maxIdx === 1) return 8.0;
+    if (maxIdx === 2) return 7.0;
+    if (maxIdx === 3) return 5.0;
+    return 3.5;
+  } else if (maxIdx <= 8) {
+    if (maxIdx === 5) return 8.0;
+    if (maxIdx === 6) return 7.0;
+    if (maxIdx === 7) return 5.0;
+    return 3.5;
+  } else if (maxIdx <= 12) {
+    if (maxIdx === 9) return 8.0;
+    if (maxIdx === 10) return 7.0;
+    if (maxIdx === 11) return 5.0;
+    return 3.5;
+  } else if (maxIdx <= 16) {
+    if (maxIdx === 13) return 8.0;
+    if (maxIdx === 14) return 7.0;
+    if (maxIdx === 15) return 5.0;
+    return 3.5;
+  } else {
+    if (maxIdx === 17) return 7.0;
+    if (maxIdx === 18) return 6.0;
+    if (maxIdx === 19) return 4.5;
+    return 3.5;
+  }
+}
+
+function getJointRadius(idx: number): number {
+  if (idx === 0) return 7.0;
+  if ([1, 2, 5, 9, 13, 17].includes(idx)) return 4.5;
+  if ([3, 6, 10, 14, 18].includes(idx)) return 3.5;
+  if ([7, 11, 15, 19].includes(idx)) return 2.5;
+  return 1.5;
+}
 
 // ==========================================
 // Main App Component
@@ -358,33 +424,60 @@ export default function App() {
 
           // Draw skeleton joints and bones
           if (results.landmarks && results.landmarks.length > 0) {
-            ctx.save();
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-            ctx.lineWidth = 1;
-            ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
-            ctx.shadowBlur = 3;
-
             results.landmarks.forEach((handLandmarks) => {
+              // Draw connections (bones)
               CONNECTIONS.forEach(([i, j]) => {
                 const pt1 = handLandmarks[i];
                 const pt2 = handLandmarks[j];
                 if (pt1 && pt2) {
+                  const mid = { x: (pt1.x + pt2.x) / 2.0, y: (pt1.y + pt2.y) / 2.0 };
+                  const inside = pointsState.length === 4 && effectMode === 'xray' && isPointInQuad(mid, pointsState);
+
+                  ctx.save();
                   ctx.beginPath();
                   ctx.moveTo((1.0 - pt1.x) * canvas.width, pt1.y * canvas.height);
                   ctx.lineTo((1.0 - pt2.x) * canvas.width, pt2.y * canvas.height);
+
+                  if (inside) {
+                    // Thick glowing X-ray bone structure
+                    ctx.strokeStyle = 'rgba(240, 250, 255, 0.95)';
+                    ctx.lineWidth = getBoneThickness(i, j);
+                    ctx.lineCap = 'round';
+                    ctx.shadowColor = 'rgba(0, 229, 255, 0.9)';
+                    ctx.shadowBlur = 8;
+                  } else {
+                    // Thin wireframe bone structure
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                    ctx.lineWidth = 1;
+                    ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
+                    ctx.shadowBlur = 3;
+                  }
                   ctx.stroke();
+                  ctx.restore();
                 }
               });
 
-              handLandmarks.forEach((pt) => {
+              // Draw joint circles (knuckles)
+              handLandmarks.forEach((pt, idx) => {
+                const inside = pointsState.length === 4 && effectMode === 'xray' && isPointInQuad(pt, pointsState);
+
+                ctx.save();
                 ctx.beginPath();
-                ctx.arc((1.0 - pt.x) * canvas.width, pt.y * canvas.height, 1.5, 0, 2 * Math.PI);
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                ctx.arc((1.0 - pt.x) * canvas.width, pt.y * canvas.height, inside ? getJointRadius(idx) : 1.5, 0, 2 * Math.PI);
+
+                if (inside) {
+                  ctx.fillStyle = 'rgba(255, 255, 255, 1.0)';
+                  ctx.shadowColor = 'rgba(0, 229, 255, 0.9)';
+                  ctx.shadowBlur = 10;
+                } else {
+                  ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                  ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
+                  ctx.shadowBlur = 3;
+                }
                 ctx.fill();
+                ctx.restore();
               });
             });
-
-            ctx.restore();
           }
 
           // Evaluate pinch and window geometry
