@@ -1,0 +1,9 @@
+node_modules
+dist
+.env
+.env.local
+.env.*
+.DS_Store
+.agents
+.system_generated
+.gemini
