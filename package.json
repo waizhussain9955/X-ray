@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "vite --host",
-    "build": "vite build && esbuild server/index.ts --bundle --platform=node --target=node18 --outfile=dist/index.js --format=esm",
+    "build": "vite build && esbuild server/index.ts --bundle --platform=node --target=node18 --outfile=dist/index.js --format=esm --external:express",
     "start": "node dist/index.js",
     "preview": "vite preview",
     "check": "tsc --noEmit",
