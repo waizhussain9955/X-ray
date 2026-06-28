@@ -376,6 +376,7 @@ export default function App() {
   const pointsRef = useRef<Point[]>([]);
   const effectModeRef = useRef<'particle' | 'xray'>('particle');
   const requestRef = useRef<number>(-1);
+  const torsoImageRef = useRef<HTMLImageElement | null>(null);
 
   const [pointsState, setPointsState] = useState<Point[]>([]);
   const [effectMode, setEffectMode] = useState<'particle' | 'xray'>('particle');
@@ -386,6 +387,15 @@ export default function App() {
   const [videoAspect, setVideoAspect] = useState(ASPECT_RATIO);
   const [videoTexture, setVideoTexture] = useState<THREE.VideoTexture | null>(null);
   const [containerStyle, setContainerStyle] = useState<React.CSSProperties>({ width: '100%', height: '100%' });
+
+  // Load muscular torso overlay image
+  useEffect(() => {
+    const img = new Image();
+    img.src = '/muscular_torso.png';
+    img.onload = () => {
+      torsoImageRef.current = img;
+    };
+  }, []);
 
   // Handle container resizing to lock aspect ratio
   useEffect(() => {
@@ -563,7 +573,7 @@ export default function App() {
             });
           }
 
-          // Draw ribcage clipped to the scanning window in X-Ray mode
+          // Draw muscular torso clipped to the scanning window in X-Ray mode
           if (effectMode === 'xray' && pointsState.length === 4) {
             ctx.save();
             
@@ -577,7 +587,7 @@ export default function App() {
             ctx.closePath();
             ctx.clip(); // Clip to this quad!
 
-            // Now draw the ribcage inside the clipped region
+            // Now draw the torso inside the clipped region
             const xTL = (1.0 - pointsState[0].x) * canvas.width;
             const xTR = (1.0 - pointsState[1].x) * canvas.width;
             const yTL = pointsState[0].y * canvas.height;
@@ -586,10 +596,22 @@ export default function App() {
             const centerX = (xTL + xTR) / 2.0;
             const centerY = (yTL + yBL) / 2.0;
 
-            const width = Math.abs(xTR - xTL) * 0.7; // chest is slightly smaller than hand distance
-            const height = width * 1.2;
+            const width = Math.abs(xTR - xTL) * 0.8; // chest is slightly smaller than hand distance
+            const height = width * 1.25;
 
-            drawRibcage(ctx, centerX, centerY, width, height);
+            if (torsoImageRef.current) {
+              ctx.globalAlpha = 0.95;
+              ctx.drawImage(
+                torsoImageRef.current,
+                centerX - width / 2.0,
+                centerY - height / 2.0,
+                width,
+                height
+              );
+            } else {
+              // Fallback to procedural ribcage if image is not loaded
+              drawRibcage(ctx, centerX, centerY, width, height);
+            }
 
             ctx.restore();
           }
