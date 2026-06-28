@@ -167,8 +167,11 @@ const XRayWindow: React.FC<XRayWindowProps> = ({
       const count = posAttr.count;
 
       for (let i = 0; i < count; i++) {
-        const u = uvAttr.getX(i);
-        const v = uvAttr.getY(i);
+        // Calculate static u, v from index to avoid reading from modified uvAttr
+        const x_index = i % 33;
+        const y_index = Math.floor(i / 33);
+        const u = x_index / 32.0;
+        const v = 1.0 - (y_index / 32.0);
 
         // Bilinear interpolation formula:
         // P(u, v) = (1 - u)*(1 - v)*BL + u*(1 - v)*BR + (1 - u)*v*TL + u*v*TR
@@ -197,7 +200,7 @@ const XRayWindow: React.FC<XRayWindowProps> = ({
   });
 
   return (
-    <mesh ref={meshRef}>
+    <mesh ref={meshRef} frustumCulled={false}>
       <planeGeometry args={[2, 2, 32, 32]} />
       <shaderMaterial
         vertexShader={VERTEX_SHADER}
@@ -431,6 +434,54 @@ export default function App() {
                 { x: handR[8].x, y: handR[8].y }, // TR
                 { x: handL[4].x, y: handL[4].y }, // BL
                 { x: handR[4].x, y: handR[4].y }  // BR
+              ];
+
+              setPointsState(pts);
+              pointsRef.current = pts;
+              setEffectMode('particle');
+              effectModeRef.current = 'particle';
+            }
+          } else if (results.landmarks && results.landmarks.length === 1) {
+            const hand = results.landmarks[0];
+            const isPinching = (h: any) => {
+              const dx = h[8].x - h[4].x;
+              const dy = h[8].y - h[4].y;
+              return Math.sqrt(dx * dx + dy * dy) < PINCH_THRESHOLD;
+            };
+
+            const pinch = isPinching(hand);
+            if (pinch) {
+              const pinchCenter = {
+                x: (hand[8].x + hand[4].x) / 2.0,
+                y: (hand[8].y + hand[4].y) / 2.0
+              };
+              const pts = [
+                { x: Math.max(0, pinchCenter.x - 0.15), y: Math.max(0, pinchCenter.y - 0.075) }, // TL
+                { x: Math.min(1, pinchCenter.x + 0.15), y: Math.max(0, pinchCenter.y - 0.075) }, // TR
+                { x: Math.max(0, pinchCenter.x - 0.15), y: Math.min(1, pinchCenter.y + 0.075) }, // BL
+                { x: Math.min(1, pinchCenter.x + 0.15), y: Math.min(1, pinchCenter.y + 0.075) }  // BR
+              ];
+              setPointsState(pts);
+              pointsRef.current = pts;
+              setEffectMode('xray');
+              effectModeRef.current = 'xray';
+            } else {
+              const indexTip = hand[8];
+              const thumbTip = hand[4];
+
+              const minX = Math.min(indexTip.x, thumbTip.x);
+              const maxX = Math.max(indexTip.x, thumbTip.x);
+              const minY = Math.min(indexTip.y, thumbTip.y);
+              const maxY = Math.max(indexTip.y, thumbTip.y);
+
+              const padX = Math.max(0.04, (maxX - minX) * 0.15);
+              const padY = Math.max(0.04, (maxY - minY) * 0.15);
+
+              const pts = [
+                { x: Math.max(0, minX - padX), y: Math.max(0, minY - padY) }, // TL
+                { x: Math.min(1, maxX + padX), y: Math.max(0, minY - padY) }, // TR
+                { x: Math.max(0, minX - padX), y: Math.min(1, maxY + padY) }, // BL
+                { x: Math.min(1, maxX + padX), y: Math.min(1, maxY + padY) }  // BR
               ];
 
               setPointsState(pts);
