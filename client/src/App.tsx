@@ -439,11 +439,12 @@ export default function App() {
         landmarkerRef.current = landmarker;
 
         try {
+          // Prioritize back camera for prank apps!
           stream = await navigator.mediaDevices.getUserMedia({
             video: {
               width: { ideal: 1280 },
               height: { ideal: 720 },
-              facingMode: "user"
+              facingMode: "environment"
             },
             audio: false
           });
@@ -588,29 +589,25 @@ export default function App() {
             ctx.clip(); // Clip to this quad!
 
             // Now draw the torso inside the clipped region
-            const xTL = (1.0 - pointsState[0].x) * canvas.width;
-            const xTR = (1.0 - pointsState[1].x) * canvas.width;
-            const yTL = pointsState[0].y * canvas.height;
-            const yBL = pointsState[2].y * canvas.height;
-
-            const centerX = (xTL + xTR) / 2.0;
-            const centerY = (yTL + yBL) / 2.0;
-
-            const width = Math.abs(xTR - xTL) * 0.8; // chest is slightly smaller than hand distance
-            const height = width * 1.25;
+            // To create a realistic X-ray effect, the body image should be anchored to the center of the screen
+            // so the scanner just acts as a window revealing different parts of it.
+            const bodyHeight = canvas.height * 0.9; // Scale body to 90% of screen height
+            const bodyWidth = bodyHeight * 0.7; // Maintain typical torso aspect ratio
+            const bodyX = canvas.width / 2.0 - bodyWidth / 2.0;
+            const bodyY = canvas.height / 2.0 - bodyHeight / 2.0 + (canvas.height * 0.1); // Shift slightly down
 
             if (torsoImageRef.current) {
               ctx.globalAlpha = 0.95;
               ctx.drawImage(
                 torsoImageRef.current,
-                centerX - width / 2.0,
-                centerY - height / 2.0,
-                width,
-                height
+                bodyX,
+                bodyY,
+                bodyWidth,
+                bodyHeight
               );
             } else {
               // Fallback to procedural ribcage if image is not loaded
-              drawRibcage(ctx, centerX, centerY, width, height);
+              drawRibcage(ctx, canvas.width / 2.0, canvas.height / 2.0 + (canvas.height * 0.1), bodyWidth, bodyHeight);
             }
 
             ctx.restore();
@@ -789,30 +786,74 @@ export default function App() {
           className="absolute inset-0 w-full h-full pointer-events-none z-20"
         />
 
-        {isReady && pointsState.length === 4 && (
+        {isReady && pointsState.length === 4 && effectMode === 'particle' && (
           <svg className="absolute inset-0 w-full h-full pointer-events-none z-20">
             <defs>
-              <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-                <feDropShadow
-                  dx="0"
-                  dy="0"
-                  stdDeviation="6"
-                  floodColor={effectMode === 'xray' ? '#00e5ff' : '#007fff'}
-                  floodOpacity="0.8"
-                />
+              <filter id="glow-particle" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="0" stdDeviation="6" floodColor="#007fff" floodOpacity="0.8" />
               </filter>
             </defs>
             <polygon
               points={pointsState.map(p => `${(1.0 - p.x) * 100},${p.y * 100}`).map(coord => `${coord}%`).join(' ')}
               fill="none"
-              stroke={effectMode === 'xray' ? '#00e5ff' : '#007fff'}
+              stroke="#007fff"
               strokeWidth="2"
-              filter="url(#glow)"
+              filter="url(#glow-particle)"
             />
           </svg>
         )}
 
-        {isReady && pointsState.length === 4 && pointsState.map((pt, idx) => (
+        {isReady && pointsState.length === 4 && effectMode === 'xray' && (
+          <svg className="absolute inset-0 w-full h-full pointer-events-none z-30 overflow-visible">
+            <defs>
+              <filter id="phone-shadow" x="-50%" y="-50%" width="200%" height="200%">
+                <feDropShadow dx="10" dy="15" stdDeviation="15" floodColor="#000" floodOpacity="0.6" />
+              </filter>
+            </defs>
+            {/* Outer phone body */}
+            <path
+              d={`M ${(1.0 - pointsState[0].x) * 100}% ${pointsState[0].y * 100}% L ${(1.0 - pointsState[1].x) * 100}% ${pointsState[1].y * 100}% L ${(1.0 - pointsState[3].x) * 100}% ${pointsState[3].y * 100}% L ${(1.0 - pointsState[2].x) * 100}% ${pointsState[2].y * 100}% Z`}
+              fill="none"
+              stroke="#1a1a1a"
+              strokeWidth="50"
+              strokeLinejoin="round"
+              filter="url(#phone-shadow)"
+            />
+            {/* Inner phone bezel / glass edge */}
+            <path
+              d={`M ${(1.0 - pointsState[0].x) * 100}% ${pointsState[0].y * 100}% L ${(1.0 - pointsState[1].x) * 100}% ${pointsState[1].y * 100}% L ${(1.0 - pointsState[3].x) * 100}% ${pointsState[3].y * 100}% L ${(1.0 - pointsState[2].x) * 100}% ${pointsState[2].y * 100}% Z`}
+              fill="none"
+              stroke="#050505"
+              strokeWidth="42"
+              strokeLinejoin="round"
+            />
+            {/* Inner screen border */}
+            <path
+              d={`M ${(1.0 - pointsState[0].x) * 100}% ${pointsState[0].y * 100}% L ${(1.0 - pointsState[1].x) * 100}% ${pointsState[1].y * 100}% L ${(1.0 - pointsState[3].x) * 100}% ${pointsState[3].y * 100}% L ${(1.0 - pointsState[2].x) * 100}% ${pointsState[2].y * 100}% Z`}
+              fill="none"
+              stroke="#333333"
+              strokeWidth="4"
+              strokeLinejoin="round"
+            />
+            {/* Camera lens at the top */}
+            <circle
+              cx={`${((1.0 - pointsState[0].x) * 100 + (1.0 - pointsState[1].x) * 100) / 2}%`}
+              cy={`${(pointsState[0].y * 100 + pointsState[1].y * 100) / 2}%`}
+              r="7"
+              fill="#0f0f0f"
+              stroke="#222"
+              strokeWidth="1.5"
+            />
+            <circle
+              cx={`${((1.0 - pointsState[0].x) * 100 + (1.0 - pointsState[1].x) * 100) / 2}%`}
+              cy={`${(pointsState[0].y * 100 + pointsState[1].y * 100) / 2}%`}
+              r="2.5"
+              fill="#1e3a8a"
+            />
+          </svg>
+        )}
+
+        {isReady && pointsState.length === 4 && effectMode === 'particle' && pointsState.map((pt, idx) => (
           <div
             key={idx}
             className="absolute w-3 h-3 bg-[#00ff66] rounded-[2px] z-20 pointer-events-none shadow-[0_0_10px_#00ff66,0_0_20px_#00ff66]"
