@@ -355,14 +355,22 @@ export default function App() {
         }
         landmarkerRef.current = landmarker;
 
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            facingMode: "user"
-          },
-          audio: false
-        });
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              facingMode: "user"
+            },
+            audio: false
+          });
+        } catch (constError) {
+          console.warn("Failed to get video with ideal constraints, trying basic video:true", constError);
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false
+          });
+        }
 
         if (!active) {
           stream.getTracks().forEach(t => t.stop());
