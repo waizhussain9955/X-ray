@@ -281,6 +281,79 @@ function getJointRadius(idx: number): number {
   return 1.5;
 }
 
+function drawRibcage(ctx: CanvasRenderingContext2D, centerX: number, centerY: number, width: number, height: number) {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(240, 250, 255, 0.95)';
+  ctx.fillStyle = 'rgba(240, 250, 255, 0.95)';
+  ctx.shadowColor = 'rgba(0, 229, 255, 0.9)';
+  ctx.shadowBlur = 10;
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+
+  // 1. Draw Spine (Vertebrae) in the center
+  ctx.beginPath();
+  ctx.moveTo(centerX, centerY - height * 0.5);
+  ctx.lineTo(centerX, centerY + height * 0.5);
+  ctx.stroke();
+
+  // Spine segments (vertebrae knuckles)
+  const segments = 8;
+  for (let i = 0; i <= segments; i++) {
+    const y = centerY - height * 0.5 + (height / segments) * i;
+    ctx.beginPath();
+    ctx.arc(centerX, y, 4, 0, 2 * Math.PI);
+    ctx.fill();
+  }
+
+  // 2. Draw Collarbones (Clavicles) at the top
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(centerX, centerY - height * 0.45);
+  ctx.bezierCurveTo(centerX - width * 0.2, centerY - height * 0.5, centerX - width * 0.4, centerY - height * 0.45, centerX - width * 0.45, centerY - height * 0.4);
+  ctx.moveTo(centerX, centerY - height * 0.45);
+  ctx.bezierCurveTo(centerX + width * 0.2, centerY - height * 0.5, centerX + width * 0.4, centerY - height * 0.45, centerX + width * 0.45, centerY - height * 0.4);
+  ctx.stroke();
+
+  // 3. Draw Sternum (breastbone) in the center top
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.moveTo(centerX, centerY - height * 0.4);
+  ctx.lineTo(centerX, centerY + height * 0.1);
+  ctx.stroke();
+
+  // 4. Draw Ribs (multiple pairs curving outwards and back)
+  ctx.lineWidth = 3.5;
+  const ribPairs = 6;
+  for (let i = 0; i < ribPairs; i++) {
+    const t = i / (ribPairs - 1);
+    const ribYStart = centerY - height * 0.35 + t * (height * 0.45);
+    const ribYEnd = centerY - height * 0.2 + t * (height * 0.35);
+    const rWidth = width * 0.48 * (1.0 - t * 0.2); 
+
+    // Left rib
+    ctx.beginPath();
+    ctx.moveTo(centerX, ribYStart);
+    ctx.bezierCurveTo(
+      centerX - rWidth * 0.6, ribYStart - height * 0.05,
+      centerX - rWidth, ribYStart + height * 0.05,
+      centerX - rWidth * 0.3, ribYEnd
+    );
+    ctx.stroke();
+
+    // Right rib
+    ctx.beginPath();
+    ctx.moveTo(centerX, ribYStart);
+    ctx.bezierCurveTo(
+      centerX + rWidth * 0.6, ribYStart - height * 0.05,
+      centerX + rWidth, ribYStart + height * 0.05,
+      centerX + rWidth * 0.3, ribYEnd
+    );
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 // ==========================================
 // Main App Component
 // ==========================================
@@ -488,6 +561,37 @@ export default function App() {
                 ctx.restore();
               });
             });
+          }
+
+          // Draw ribcage clipped to the scanning window in X-Ray mode
+          if (effectMode === 'xray' && pointsState.length === 4) {
+            ctx.save();
+            
+            // Define clipping region (the quadrilateral)
+            ctx.beginPath();
+            const vs = [pointsState[0], pointsState[1], pointsState[3], pointsState[2]]; // TL, TR, BR, BL
+            ctx.moveTo((1.0 - vs[0].x) * canvas.width, vs[0].y * canvas.height);
+            for (let i = 1; i < vs.length; i++) {
+              ctx.lineTo((1.0 - vs[i].x) * canvas.width, vs[i].y * canvas.height);
+            }
+            ctx.closePath();
+            ctx.clip(); // Clip to this quad!
+
+            // Now draw the ribcage inside the clipped region
+            const xTL = (1.0 - pointsState[0].x) * canvas.width;
+            const xTR = (1.0 - pointsState[1].x) * canvas.width;
+            const yTL = pointsState[0].y * canvas.height;
+            const yBL = pointsState[2].y * canvas.height;
+
+            const centerX = (xTL + xTR) / 2.0;
+            const centerY = (yTL + yBL) / 2.0;
+
+            const width = Math.abs(xTR - xTL) * 0.7; // chest is slightly smaller than hand distance
+            const height = width * 1.2;
+
+            drawRibcage(ctx, centerX, centerY, width, height);
+
+            ctx.restore();
           }
 
           // Evaluate pinch and window geometry
