@@ -307,6 +307,7 @@ export default function App() {
   const [pointsState, setPointsState] = useState<Point[]>([]);
   const [effectMode, setEffectMode] = useState<'particle' | 'xray'>('particle');
   const [isReady, setIsReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [videoWidth, setVideoWidth] = useState(1280);
   const [videoHeight, setVideoHeight] = useState(720);
   const [videoAspect, setVideoAspect] = useState(ASPECT_RATIO);
@@ -387,6 +388,7 @@ export default function App() {
         setIsReady(true);
       } catch (err) {
         console.error("Initialization failed:", err);
+        setError(err instanceof Error ? err.message : String(err));
       }
     }
 
@@ -688,10 +690,11 @@ export default function App() {
           />
         ))}
 
-        {!isReady && (
-          <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-black/85 text-white font-medium text-lg z-30 space-y-4 animate-pulse">
-            <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
-            <div>Loading AI Models & Camera...</div>
+        {error && (
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-red-950/90 border border-red-500 text-white px-4 py-2 rounded-[6px] z-30 text-sm shadow-[0_0_15px_rgba(239,68,68,0.5)] max-w-[90%] text-center font-medium">
+            ⚠️ {error.includes("Permission denied") || error.includes("NotAllowedError") 
+                 ? "Camera permission denied. Please allow camera access in your browser settings."
+                 : `Error: ${error}`}
           </div>
         )}
       </div>
